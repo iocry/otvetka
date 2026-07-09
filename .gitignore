@@ -1,0 +1,20 @@
+# Артефакты сборки Rust/Tauri
+/src-tauri/target/
+/src-tauri/gen/
+
+# Бинарники llama.cpp (качаются скриптом scripts/fetch-llama.ps1)
+/src-tauri/resources/llama/
+
+# Готовые сборки (копии из папки сборки)
+/dist/
+
+# Локальная настройка папки сборки (содержит абсолютный путь конкретной машины)
+/.cargo/config.toml
+
+# Исходная картинка-заготовка иконки (иконки в src-tauri/icons генерируются из неё)
+/app-icon.png
+
+# Временное
+*.part
+*.log
+*.tmp

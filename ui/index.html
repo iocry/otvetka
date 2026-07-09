@@ -1,0 +1,163 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script>
+    // Показываем любую ошибку JS прямо в окне — чтобы поломка не выглядела «пустотой»
+    window.addEventListener("error", function (e) {
+      var show = function () {
+        var d = document.createElement("div");
+        d.style.cssText =
+          "position:fixed;left:8px;right:8px;bottom:8px;background:#fdecec;color:#a11;font:11px monospace;padding:8px;border-radius:8px;z-index:9999;white-space:pre-wrap;";
+        d.textContent = "Ошибка: " + e.message + "\n" + (e.filename || "") + ":" + (e.lineno || "");
+        document.body.appendChild(d);
+      };
+      document.body ? show() : window.addEventListener("DOMContentLoaded", show);
+    });
+  </script>
+  <link rel="stylesheet" href="common.css" />
+  <style>
+    html, body { background: transparent; height: 100%; overflow: hidden; }
+    .card {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px 6px;
+      user-select: none;
+      cursor: default;
+    }
+    header .logo { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+    header .title { font-weight: 600; font-size: 13px; flex: 1; }
+    header button { color: var(--muted); font-size: 15px; padding: 2px 6px; border-radius: 6px; }
+    header button:hover { background: var(--chip); color: var(--text); }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      padding: 4px 12px 10px;
+      max-height: 100px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+    }
+    .chip {
+      white-space: nowrap;
+      padding: 5px 11px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: var(--chip-text);
+      font-size: 12.5px;
+      border: 1px solid transparent;
+    }
+    .chip.active { background: var(--accent); color: #fff; }
+
+    #content { flex: 1; overflow-y: auto; padding: 2px 12px 8px; display: flex; flex-direction: column; gap: 8px; }
+
+    .variant {
+      text-align: left;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 11px;
+      padding: 10px 12px;
+      line-height: 1.42;
+      transition: background .12s, border-color .12s;
+      position: relative;
+    }
+    .variant:hover { background: var(--card-hover); border-color: var(--accent); }
+    .variant .num { color: var(--muted); font-size: 11px; margin-right: 6px; }
+    .variant.copied { border-color: var(--ok); }
+
+    .skel {
+      height: 54px;
+      border-radius: 11px;
+      background: linear-gradient(100deg, var(--skel) 40%, var(--card-hover) 50%, var(--skel) 60%);
+      background-size: 200% 100%;
+      animation: sh 1.1s infinite linear;
+    }
+    @keyframes sh { to { background-position: -200% 0; } }
+
+    .variant.skel-empty {
+      min-height: 42px;
+      color: transparent;
+      background: linear-gradient(100deg, var(--skel) 40%, var(--card-hover) 50%, var(--skel) 60%);
+      background-size: 200% 100%;
+      animation: sh 1.1s infinite linear;
+      pointer-events: none;
+    }
+    .variant.skel-empty .num { visibility: hidden; }
+    .variant.cursor .vtext::after {
+      content: "▋";
+      color: var(--muted);
+      animation: blink 1s steps(2) infinite;
+      margin-left: 1px;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .msg { padding: 18px 8px; text-align: center; color: var(--muted); line-height: 1.5; }
+    .msg .actions { margin-top: 12px; display: flex; gap: 8px; justify-content: center; }
+
+    footer {
+      display: flex;
+      align-items: center;
+      padding: 8px 12px 10px;
+      gap: 8px;
+      border-top: 1px solid var(--border);
+    }
+    footer .short-toggle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+    }
+    footer .hint { flex: 1; font-size: 11px; color: var(--muted); }
+    footer .toast { flex: 1; font-size: 12px; color: var(--ok); font-weight: 600; display: none; }
+    footer .regen {
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 999px;
+      transition: background .12s, transform .06s;
+    }
+    footer .regen:hover { background: var(--accent-hover); }
+    footer .regen:active { transform: scale(.97); }
+    footer .regen:disabled { opacity: .5; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <header data-tauri-drag-region>
+      <div class="logo" data-tauri-drag-region></div>
+      <div class="title" data-tauri-drag-region id="title">Ответка</div>
+      <button id="btn-settings" title="Настройки">⚙</button>
+      <button id="btn-close">✕</button>
+    </header>
+    <div class="chips" id="chips"></div>
+    <div id="content"></div>
+    <footer>
+      <label class="short-toggle" title="">
+        <span class="switch"><input type="checkbox" id="short-cb" /><span class="track"></span></span>
+        <span id="short-label"></span>
+      </label>
+      <div class="hint" id="hint"></div>
+      <div class="toast" id="toast"></div>
+      <button id="btn-regen" class="regen">↻ <span id="regen-label"></span></button>
+    </footer>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
