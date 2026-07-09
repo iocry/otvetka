@@ -35,10 +35,23 @@ fn total_ram_gb() -> f64 {
     0.0
 }
 
-/// Определяет видеокарту и объём видеопамяти (ГБ) через `llama-server --list-devices`.
-fn detect_gpu(app: &AppHandle) -> (String, f64) {
+/// Дискретная ли видеокарта (по названию), а не встроенная в процессор.
+fn is_discrete_gpu(name: &str) -> bool {
+    let u = name.to_uppercase();
+    [
+        "NVIDIA", "GEFORCE", "RTX", "GTX", "QUADRO", "TESLA", "RADEON RX", "RADEON PRO", "ARC",
+    ]
+    .iter()
+    .any(|k| u.contains(k))
+}
+
+/// Определяет видеокарту через `llama-server --list-devices`.
+/// Возвращает (имя, видеопамять ГБ, дискретная_ли).
+/// Приоритет — дискретной карте: встроенная (AMD APU / Intel) показывает
+/// разделяемую системную память и вводит в заблуждение.
+fn detect_gpu(app: &AppHandle) -> (String, f64, bool) {
     let Some(exe) = crate::llama::server_exe(app) else {
-        return (String::new(), 0.0);
+        return (String::new(), 0.0, false);
     };
     let mut cmd = std::process::Command::new(exe);
     cmd.arg("--list-devices");
@@ -48,49 +61,60 @@ fn detect_gpu(app: &AppHandle) -> (String, f64) {
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
     let Ok(out) = cmd.output() else {
-        return (String::new(), 0.0);
+        return (String::new(), 0.0, false);
     };
     let mut text = String::from_utf8_lossy(&out.stdout).to_string();
     text.push('\n');
     text.push_str(&String::from_utf8_lossy(&out.stderr));
 
     // строки вида: "  Vulkan0: NVIDIA GeForce RTX 5070 Ti (15995 MiB, 15227 MiB free)"
-    let mut best_mib = 0u64;
-    let mut name = String::new();
+    let mut devices: Vec<(String, u64)> = Vec::new();
     for line in text.lines() {
         let Some(op) = line.find('(') else { continue };
         let after = &line[op + 1..];
-        let Some(mib_pos) = after.find(" MiB") else {
-            continue;
-        };
+        let Some(mib_pos) = after.find(" MiB") else { continue };
         let num: String = after[..mib_pos]
             .chars()
             .filter(|c| c.is_ascii_digit())
             .collect();
-        if let Ok(n) = num.parse::<u64>() {
-            if n > best_mib {
-                best_mib = n;
-                if let Some(colon) = line.find(": ") {
-                    name = line[colon + 2..op].trim().to_string();
-                }
-            }
+        let Ok(n) = num.parse::<u64>() else { continue };
+        let name = match line.find(": ") {
+            Some(colon) => line[colon + 2..op].trim().to_string(),
+            None => line[..op].trim().to_string(),
+        };
+        if !name.is_empty() {
+            devices.push((name, n));
         }
     }
-    (name, best_mib as f64 / 1024.0)
+    if devices.is_empty() {
+        return (String::new(), 0.0, false);
+    }
+
+    // сначала ищем дискретную карту; если нет — берём с наибольшей памятью
+    let chosen = devices
+        .iter()
+        .find(|(n, _)| is_discrete_gpu(n))
+        .or_else(|| devices.iter().max_by_key(|(_, m)| *m))
+        .cloned()
+        .unwrap();
+    let discrete = is_discrete_gpu(&chosen.0);
+    (chosen.0, chosen.1 as f64 / 1024.0, discrete)
 }
 
 /// Рекомендация модели под железо пользователя.
 #[tauri::command]
 pub fn recommend_model(app: AppHandle) -> serde_json::Value {
     let ram_gb = total_ram_gb();
-    let (gpu, vram_gb) = detect_gpu(&app);
-    let rec = if vram_gb >= 11.0 {
+    let (gpu, vram_gb, discrete) = detect_gpu(&app);
+    // На дискретной видеокарте ориентируемся на её видеопамять; без неё —
+    // на объём ОЗУ (встроенная графика тянет тяжёлые модели слабо).
+    let rec = if discrete && vram_gb >= 11.0 {
         "big14"
-    } else if vram_gb >= 7.0 {
+    } else if discrete && vram_gb >= 7.0 {
         "big8"
-    } else if vram_gb >= 4.0 {
+    } else if discrete && vram_gb >= 4.0 {
         "standard"
-    } else if vram_gb >= 1.0 {
+    } else if discrete && vram_gb >= 1.0 {
         "light"
     } else if ram_gb >= 16.0 {
         "standard"
@@ -101,6 +125,7 @@ pub fn recommend_model(app: AppHandle) -> serde_json::Value {
         "ramGb": (ram_gb * 10.0).round() / 10.0,
         "vramGb": (vram_gb * 10.0).round() / 10.0,
         "gpu": gpu,
+        "discrete": discrete,
         "recommendedId": rec,
     })
 }
