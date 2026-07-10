@@ -219,7 +219,17 @@ function renderModels() {
     if (isDl && dl.total) {
       const p = Math.round((dl.downloaded / dl.total) * 100);
       prog.firstElementChild.style.width = p + "%";
-      pct.textContent = p + "% · " + fmtGb(dl.downloaded) + " / " + fmtGb(dl.total);
+      let line = p + "% · " + fmtGb(dl.downloaded) + " / " + fmtGb(dl.total);
+      if (dl.speed > 0) {
+        const mbs = (dl.speed / 1024 / 1024).toFixed(1);
+        const etaSec = Math.max(0, (dl.total - dl.downloaded) / dl.speed);
+        const eta =
+          etaSec >= 90
+            ? "≈" + Math.round(etaSec / 60) + (lang === "ru" ? " мин" : " min")
+            : "≈" + Math.round(etaSec) + (lang === "ru" ? " сек" : " sec");
+        line += " · " + mbs + (lang === "ru" ? " МБ/с" : " MB/s") + " · " + eta;
+      }
+      pct.textContent = line;
     }
 
     bDl.onclick = async () => {
@@ -432,7 +442,15 @@ async function boot() {
   await listen("model-dl-progress", (e) => {
     const p = e.payload;
     if (p.canceled) { dl = null; refresh(); return; }
-    dl = p.done ? null : { id: p.id, downloaded: p.downloaded, total: p.total };
+    if (p.done) { dl = null; renderModels(); return; }
+    // считаем скорость (сглаженную) по времени между событиями прогресса
+    const now = Date.now();
+    let speed = 0;
+    if (dl && dl.id === p.id && dl.ts && p.downloaded > dl.downloaded) {
+      const inst = (p.downloaded - dl.downloaded) / ((now - dl.ts) / 1000 || 1);
+      speed = dl.speed ? dl.speed * 0.7 + inst * 0.3 : inst;
+    }
+    dl = { id: p.id, downloaded: p.downloaded, total: p.total, ts: now, speed };
     renderModels();
   });
   await listen("llama-status", (e) => {

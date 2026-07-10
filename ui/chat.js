@@ -24,6 +24,16 @@ const Chat = (function () {
     return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
+  // Мини-маркдаун для ответов ассистента: **жирный**, *курсив*, `код`, ```блоки```
+  function mdLite(s) {
+    let h = esc(s);
+    h = h.replace(/```[a-zа-я0-9]*\n?([\s\S]*?)```/gi, (m, c) => "<pre>" + c.replace(/\n+$/, "") + "</pre>");
+    h = h.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+    h = h.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+    h = h.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, "$1<i>$2</i>");
+    return h;
+  }
+
   const saveSoon = (() => {
     let tmr = null;
     return () => {
@@ -99,7 +109,8 @@ const Chat = (function () {
     }
     for (const m of c.messages) {
       const b = bubble(m.role);
-      b.textContent = m.content;
+      if (m.role === "assistant") b.innerHTML = mdLite(m.content);
+      else b.textContent = m.content;
       box.appendChild(b);
     }
     box.scrollTop = box.scrollHeight;
@@ -199,6 +210,7 @@ const Chat = (function () {
     curContent = "";
     curThink = "";
     setSending(false);
+    if (!isError) renderMessages(); // перерисовка с маркдауном
   }
 
   function updateModelBar() {

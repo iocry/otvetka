@@ -77,6 +77,9 @@ pub async fn chat_send(
         "temperature": 0.7,
         "top_p": 0.95,
         "max_tokens": 2048,
+        // мягкие штрафы, чтобы ассистент не зацикливался на одних формулировках
+        "presence_penalty": 0.4,
+        "frequency_penalty": 0.2,
         "stream": true
     });
 
