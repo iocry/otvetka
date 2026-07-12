@@ -31,6 +31,8 @@ pub struct Settings {
     pub auto_copy: bool,
     /// Примеры собственных сообщений пользователя — чтобы модель писала «как он»
     pub my_examples: String,
+    /// Активная модель генерации изображений (id из IMAGE_CATALOG, напр. "sdxl" | "chroma")
+    pub image_model: Option<String>,
 }
 
 impl Default for Settings {
@@ -49,6 +51,7 @@ impl Default for Settings {
             reply_short: false,
             auto_copy: true,
             my_examples: String::new(),
+            image_model: None,
         }
     }
 }

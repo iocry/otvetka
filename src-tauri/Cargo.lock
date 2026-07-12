@@ -2465,9 +2465,10 @@ dependencies = [
 
 [[package]]
 name = "otvetka"
-version = "1.0.0"
+version = "2.0.0"
 dependencies = [
  "arboard",
+ "base64 0.22.1",
  "futures-util",
  "reqwest 0.12.28",
  "serde",

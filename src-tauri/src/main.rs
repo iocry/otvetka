@@ -2,11 +2,12 @@
 
 mod chat;
 mod gen;
+mod image;
 mod llama;
 mod models;
 mod settings;
 
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
@@ -19,7 +20,10 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 pub struct AppState {
     pub settings: Mutex<settings::Settings>,
     pub llama: llama::LlamaState,
+    pub image: image::ImageState,
     pub dl_cancel: Arc<AtomicBool>,
+    pub img_dl_cancel: Arc<AtomicBool>,
+    pub img_cancel: Arc<AtomicBool>,
     pub client: reqwest::Client,
     pub first_run: bool,
     /// Успел ли popup получить фокус после показа — чтобы прятать его
@@ -29,6 +33,8 @@ pub struct AppState {
     pub chat_gen: AtomicU64,
     /// Поколение потоковой генерации вариантов — для отмены при «ещё варианты».
     pub gen_gen: AtomicU64,
+    /// Пользователь сейчас на вкладке генерации картинок (текстовая модель выгружена).
+    pub image_mode_active: AtomicBool,
 }
 
 /// Эмулирует чистое нажатие Ctrl+C. Перед этим «отпускает» все модификаторы,
@@ -182,6 +188,9 @@ fn get_state(app: AppHandle, state: tauri::State<'_, AppState>) -> serde_json::V
         "version": app.package_info().version.to_string(),
         "modelsDir": models_dir.display().to_string(),
         "modelsBytes": total_bytes,
+        "imageCatalog": models::image_catalog_json(),
+        "imageDownloaded": models::downloaded_image_ids(&app),
+        "image": state.image.status_string(),
     })
 }
 
@@ -281,6 +290,21 @@ fn main() {
             models::use_model,
             models::delete_model,
             models::recommend_model,
+            models::download_image_model,
+            models::cancel_image_download,
+            models::use_image_model,
+            models::delete_image_model,
+            models::recommend_image_model,
+            image::generate_image,
+            image::cancel_image,
+            image::image_mode,
+            image::enhance_prompt,
+            image::translate_prompt,
+            image::image_data_url,
+            image::delete_image,
+            image::open_images_dir,
+            image::gallery_get,
+            image::gallery_set,
             chat::chat_send,
             chat::chat_stop,
             chat::chat_get,
@@ -305,12 +329,16 @@ fn main() {
             app.manage(AppState {
                 settings: Mutex::new(s.clone()),
                 llama: llama::LlamaState::default(),
+                image: image::ImageState::default(),
                 dl_cancel: Arc::new(AtomicBool::new(false)),
+                img_dl_cancel: Arc::new(AtomicBool::new(false)),
+                img_cancel: Arc::new(AtomicBool::new(false)),
                 client: reqwest::Client::new(),
                 first_run,
                 popup_focused: AtomicBool::new(false),
                 chat_gen: AtomicU64::new(0),
                 gen_gen: AtomicU64::new(0),
+                image_mode_active: AtomicBool::new(false),
             });
 
             // Горячая клавиша
@@ -347,6 +375,9 @@ fn main() {
 
             // Запускаем движок (если модель уже выбрана)
             llama::restart(handle.clone());
+            // Движок картинок грузится лениво (при первой генерации); здесь только
+            // запускаем монитор простоя, который выгрузит модель через 10 мин без работы.
+            image::spawn_idle_monitor(handle.clone());
 
             // Первый запуск — открываем настройки (там экран выбора модели)
             if first_run || s.model_file.is_none() {
@@ -358,6 +389,15 @@ fn main() {
             WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
+                // Закрыли окно настроек (свернули в трей). Если были в режиме
+                // картинок — выгружаем картиночную модель из VRAM и возвращаем
+                // текстовую (для ответов по хоткею).
+                if window.label() == "settings"
+                    && window.state::<AppState>().image_mode_active.swap(false, Ordering::SeqCst)
+                {
+                    image::unload(window.app_handle());
+                    llama::restart(window.app_handle().clone());
+                }
             }
             WindowEvent::Focused(focused) => {
                 if window.label() == "popup" {
@@ -384,6 +424,7 @@ fn main() {
             }
             RunEvent::Exit => {
                 llama::kill(app);
+                image::kill(app);
             }
             _ => {}
         });

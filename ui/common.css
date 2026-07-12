@@ -4,48 +4,86 @@
   font-family: "Segoe UI", system-ui, sans-serif;
   --accent: #6c5ce7;
   --accent-hover: #7d6ef0;
+  --radius: 10px;
+  --radius-lg: 14px;
   /* значения светлой темы по умолчанию — чтобы окно никогда не было «прозрачным»,
      даже если JS не успел выставить data-theme */
-  --bg: #f7f7fb;
+  --bg: #f6f6fb;
   --card: #ffffff;
-  --card-hover: #f0eefc;
+  --card-hover: #f1effc;
   --text: #1b1b22;
   --muted: #71717d;
-  --border: #e2e2ea;
-  --chip: #ececf4;
+  --border: #e5e5ee;
+  --chip: #ececf5;
   --chip-text: #3a3a44;
   --skel: #e8e8f0;
   --ok: #14883f;
   --err: #c43333;
+  --accent-soft: rgba(108, 92, 231, 0.10);
+  --focus: rgba(108, 92, 231, 0.28);
+  --shadow: 0 1px 2px rgba(24, 24, 48, 0.05), 0 1px 3px rgba(24, 24, 48, 0.06);
+  --shadow-md: 0 4px 14px rgba(24, 24, 48, 0.10);
+  --shadow-lg: 0 12px 34px rgba(24, 24, 48, 0.16);
 }
 :root[data-theme="light"] {
-  --bg: #f7f7fb;
+  --bg: #f6f6fb;
   --card: #ffffff;
-  --card-hover: #f0eefc;
+  --card-hover: #f1effc;
   --text: #1b1b22;
   --muted: #71717d;
-  --border: #e2e2ea;
-  --chip: #ececf4;
+  --border: #e5e5ee;
+  --chip: #ececf5;
   --chip-text: #3a3a44;
   --skel: #e8e8f0;
   --ok: #14883f;
   --err: #c43333;
+  --accent-soft: rgba(108, 92, 231, 0.10);
+  --focus: rgba(108, 92, 231, 0.28);
+  --shadow: 0 1px 2px rgba(24, 24, 48, 0.05), 0 1px 3px rgba(24, 24, 48, 0.06);
+  --shadow-md: 0 4px 14px rgba(24, 24, 48, 0.10);
+  --shadow-lg: 0 12px 34px rgba(24, 24, 48, 0.16);
 }
 :root[data-theme="dark"] {
-  --bg: #17171d;
-  --card: #202027;
+  --bg: #16161c;
+  --card: #212129;
   --card-hover: #2b2b38;
   --text: #ececf2;
   --muted: #9a9aa8;
-  --border: #32323d;
+  --border: #33333f;
   --chip: #2a2a34;
   --chip-text: #d4d4de;
   --skel: #2c2c36;
   --ok: #38c46a;
   --err: #ff7070;
+  --accent-soft: rgba(124, 110, 240, 0.18);
+  --focus: rgba(124, 110, 240, 0.40);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.30), 0 2px 6px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 14px 38px rgba(0, 0, 0, 0.55);
 }
 
-body { background: var(--bg); color: var(--text); font-size: 14px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+::selection { background: var(--accent-soft); }
+
+/* Аккуратные тонкие скроллбары в тон теме */
+*::-webkit-scrollbar { width: 11px; height: 11px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+  background-clip: padding-box;
+}
 
 button {
   font: inherit;
@@ -56,32 +94,42 @@ button {
 }
 
 .btn {
-  padding: 7px 14px;
-  border-radius: 8px;
+  padding: 8px 15px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   background: var(--card);
-  transition: background .12s;
+  font-weight: 500;
+  transition: background .14s, border-color .14s, box-shadow .14s, transform .06s;
 }
-.btn:hover { background: var(--card-hover); }
+.btn:hover { background: var(--card-hover); border-color: var(--border); }
+.btn:active { transform: translateY(1px); }
 .btn.primary {
-  background: var(--accent);
+  background: linear-gradient(180deg, var(--accent-hover), var(--accent));
   border-color: var(--accent);
   color: #fff;
+  box-shadow: var(--shadow);
 }
-.btn.primary:hover { background: var(--accent-hover); }
+.btn.primary:hover { filter: brightness(1.05); }
+.btn.primary:disabled { opacity: .55; cursor: default; filter: none; }
 .btn.danger { color: var(--err); }
+.btn.danger:hover { border-color: var(--err); }
 
-input[type="text"], textarea, select {
+input[type="text"], input[type="number"], textarea, select {
   font: inherit;
   color: var(--text);
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: var(--radius);
+  padding: 9px 11px;
   outline: none;
   width: 100%;
+  transition: border-color .14s, box-shadow .14s;
 }
-input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+input:focus, textarea:focus, select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus);
+}
+input[type="range"] { accent-color: var(--accent); }
 
 .muted { color: var(--muted); }
 

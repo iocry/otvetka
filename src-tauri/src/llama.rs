@@ -17,6 +17,8 @@ pub struct Inner {
     pub port: u16,
     pub status: Status,
     pub generation: u64,
+    /// Какой файл модели сейчас загружен (чтобы не перезапускать зря).
+    pub loaded_model: Option<String>,
 }
 
 #[derive(Default)]
@@ -70,6 +72,7 @@ pub fn kill(app: &AppHandle) {
         let _ = c.wait();
     }
     inner.status = Status::Stopped;
+    inner.loaded_model = None;
 }
 
 fn set_error(app: &AppHandle, msg: &str) {
@@ -85,122 +88,149 @@ pub fn emit_status(app: &AppHandle) {
 }
 
 /// Перезапускает llama-server с моделью из настроек (или останавливает, если модели нет).
+/// Fire-and-forget: грузит модель в фоне.
 pub fn restart(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let state = app.state::<crate::AppState>();
-        let model_file = state.settings.lock().unwrap().model_file.clone();
-
-        {
-            let mut inner = state.llama.0.lock().unwrap();
-            inner.generation += 1;
-            if let Some(mut c) = inner.child.take() {
-                let _ = c.kill();
-                let _ = c.wait();
+        let model_file = app
+            .state::<crate::AppState>()
+            .settings
+            .lock()
+            .unwrap()
+            .model_file
+            .clone();
+        match model_file {
+            Some(f) => {
+                let _ = ensure_model(&app, &f).await;
             }
-            inner.status = Status::Stopped;
-        }
-
-        let Some(model_file) = model_file else {
-            emit_status(&app);
-            return;
-        };
-        let model_path = models_dir(&app).join(&model_file);
-        if !model_path.exists() {
-            set_error(&app, "model_missing");
-            return;
-        }
-        let Some(exe) = server_exe(&app) else {
-            set_error(&app, "engine_missing");
-            return;
-        };
-
-        let port = free_port();
-        let log = app
-            .path()
-            .app_data_dir()
-            .ok()
-            .and_then(|d| {
-                let _ = std::fs::create_dir_all(&d);
-                std::fs::File::create(d.join("llama-server.log")).ok()
-            });
-
-        let mut cmd = Command::new(&exe);
-        cmd.arg("-m")
-            .arg(&model_path)
-            .args([
-                "--host", "127.0.0.1",
-                "--port", &port.to_string(),
-                "-c", "4096",
-                "-ngl", "99",
-                "--jinja",
-                "--no-webui",
-            ])
-            .stdout(Stdio::null());
-        match log {
-            Some(f) => { cmd.stderr(Stdio::from(f)); }
-            None => { cmd.stderr(Stdio::null()); }
-        }
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            cmd.creation_flags(CREATE_NO_WINDOW);
-        }
-
-        let child = match cmd.spawn() {
-            Ok(c) => c,
-            Err(e) => {
-                set_error(&app, &format!("spawn: {e}"));
-                return;
-            }
-        };
-
-        let my_gen;
-        {
-            let mut inner = state.llama.0.lock().unwrap();
-            inner.child = Some(child);
-            inner.port = port;
-            inner.status = Status::Loading;
-            my_gen = inner.generation;
-        }
-        emit_status(&app);
-
-        // Ждём, пока сервер прогрузит модель
-        let client = state.client.clone();
-        let url = format!("http://127.0.0.1:{port}/health");
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
-        loop {
-            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-            {
-                let mut inner = state.llama.0.lock().unwrap();
-                if inner.generation != my_gen {
-                    return;
-                }
-                if let Some(c) = inner.child.as_mut() {
-                    if let Ok(Some(st)) = c.try_wait() {
-                        inner.status = Status::Error(format!("exited: {st}"));
-                        drop(inner);
-                        emit_status(&app);
-                        return;
-                    }
-                }
-            }
-            if let Ok(resp) = client.get(&url).send().await {
-                if resp.status().is_success() {
-                    let mut inner = state.llama.0.lock().unwrap();
-                    if inner.generation != my_gen {
-                        return;
-                    }
-                    inner.status = Status::Ready;
-                    drop(inner);
-                    emit_status(&app);
-                    return;
-                }
-            }
-            if std::time::Instant::now() > deadline {
-                set_error(&app, "load_timeout");
-                return;
+            None => {
+                kill(&app);
+                emit_status(&app);
             }
         }
     });
+}
+
+/// Гарантирует, что llama-server запущен с указанной моделью и готов.
+/// Ожидает готовности и возвращает порт. Если нужная модель уже загружена —
+/// возвращает сразу.
+pub async fn ensure_model(app: &AppHandle, model_file: &str) -> Result<u16, String> {
+    let state = app.state::<crate::AppState>();
+
+    {
+        let inner = state.llama.0.lock().unwrap();
+        if inner.status == Status::Ready
+            && inner.child.is_some()
+            && inner.loaded_model.as_deref() == Some(model_file)
+        {
+            return Ok(inner.port);
+        }
+    }
+
+    let model_path = models_dir(app).join(model_file);
+    if !model_path.exists() {
+        set_error(app, "model_missing");
+        return Err("model_missing".into());
+    }
+    let Some(exe) = server_exe(app) else {
+        set_error(app, "engine_missing");
+        return Err("engine_missing".into());
+    };
+
+    {
+        let mut inner = state.llama.0.lock().unwrap();
+        inner.generation += 1;
+        if let Some(mut c) = inner.child.take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+        inner.status = Status::Loading;
+        inner.loaded_model = None;
+    }
+    emit_status(app);
+
+    let port = free_port();
+    let log = app.path().app_data_dir().ok().and_then(|d| {
+        let _ = std::fs::create_dir_all(&d);
+        std::fs::File::create(d.join("llama-server.log")).ok()
+    });
+
+    let mut cmd = Command::new(&exe);
+    cmd.arg("-m")
+        .arg(&model_path)
+        .args([
+            "--host", "127.0.0.1",
+            "--port", &port.to_string(),
+            "-c", "4096",
+            "-ngl", "99",
+            "--jinja",
+            "--no-webui",
+        ])
+        .stdout(Stdio::null());
+    match log {
+        Some(f) => { cmd.stderr(Stdio::from(f)); }
+        None => { cmd.stderr(Stdio::null()); }
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let child = match cmd.spawn() {
+        Ok(c) => c,
+        Err(e) => {
+            set_error(app, &format!("spawn: {e}"));
+            return Err(format!("spawn: {e}"));
+        }
+    };
+
+    let my_gen;
+    {
+        let mut inner = state.llama.0.lock().unwrap();
+        inner.child = Some(child);
+        inner.port = port;
+        inner.status = Status::Loading;
+        my_gen = inner.generation;
+    }
+    emit_status(app);
+
+    let client = state.client.clone();
+    let url = format!("http://127.0.0.1:{port}/health");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
+    loop {
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        {
+            let mut inner = state.llama.0.lock().unwrap();
+            if inner.generation != my_gen {
+                return Err("superseded".into());
+            }
+            if let Some(c) = inner.child.as_mut() {
+                if let Ok(Some(st)) = c.try_wait() {
+                    inner.status = Status::Error(format!("exited: {st}"));
+                    drop(inner);
+                    emit_status(app);
+                    return Err("exited".into());
+                }
+            }
+        }
+        if let Ok(resp) = client.get(&url).send().await {
+            if resp.status().is_success() {
+                let mut inner = state.llama.0.lock().unwrap();
+                if inner.generation != my_gen {
+                    return Err("superseded".into());
+                }
+                inner.status = Status::Ready;
+                inner.loaded_model = Some(model_file.to_string());
+                let p = inner.port;
+                drop(inner);
+                emit_status(app);
+                return Ok(p);
+            }
+        }
+        if std::time::Instant::now() > deadline {
+            set_error(app, "load_timeout");
+            return Err("load_timeout".into());
+        }
+    }
 }

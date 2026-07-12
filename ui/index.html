@@ -24,8 +24,9 @@
       flex-direction: column;
       background: var(--bg);
       border: 1px solid var(--border);
-      border-radius: 14px;
+      border-radius: var(--radius-lg);
       overflow: hidden;
+      box-shadow: var(--shadow-lg);
     }
     header {
       display: flex;
@@ -66,13 +67,15 @@
       text-align: left;
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 11px;
-      padding: 10px 12px;
+      border-radius: var(--radius);
+      padding: 11px 13px;
       line-height: 1.42;
-      transition: background .12s, border-color .12s;
+      transition: background .12s, border-color .12s, box-shadow .12s, transform .06s;
       position: relative;
+      box-shadow: var(--shadow);
     }
-    .variant:hover { background: var(--card-hover); border-color: var(--accent); }
+    .variant:hover { background: var(--card-hover); border-color: var(--accent); box-shadow: var(--shadow-md); }
+    .variant:active { transform: translateY(1px); }
     .variant .num { color: var(--muted); font-size: 11px; margin-right: 6px; }
     .variant.copied { border-color: var(--ok); }
 

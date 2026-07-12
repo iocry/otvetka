@@ -5,6 +5,9 @@
 # Бинарники llama.cpp (качаются скриптом scripts/fetch-llama.ps1)
 /src-tauri/resources/llama/
 
+# Бинарники stable-diffusion.cpp (качаются скриптом scripts/fetch-sd.ps1)
+/src-tauri/resources/sd/
+
 # Готовые сборки (копии из папки сборки)
 /dist/
 

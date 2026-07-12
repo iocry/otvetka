@@ -27,17 +27,19 @@
       flex-direction: column;
       gap: 4px;
     }
-    nav .app-name { font-weight: 700; padding: 0 10px 14px; font-size: 15px; }
+    nav .app-name { font-weight: 700; padding: 2px 10px 16px; font-size: 15px; letter-spacing: -0.01em; }
     nav .app-name .dot { color: var(--accent); }
     nav button {
       text-align: left;
-      padding: 9px 12px;
-      border-radius: 8px;
+      padding: 10px 12px;
+      border-radius: var(--radius);
       color: var(--muted);
       font-size: 14px;
+      font-weight: 500;
+      transition: background .14s, color .14s, box-shadow .14s;
     }
     nav button:hover { background: var(--card-hover); color: var(--text); }
-    nav button.active { background: var(--accent); color: #fff; }
+    nav button.active { background: var(--accent); color: #fff; box-shadow: var(--shadow); }
     nav .spacer { flex: 1; }
     nav .ver { padding: 0 10px; font-size: 11px; color: var(--muted); }
 
@@ -132,7 +134,7 @@
     .chat-input-row { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); align-items: flex-end; }
     .chat-input-row textarea { resize: none; max-height: 140px; min-height: 42px; }
     .chat-input-row button { flex: none; height: 42px; }
-    h2 { font-size: 17px; margin-bottom: 18px; }
+    h2 { font-size: 17px; margin-bottom: 18px; letter-spacing: -0.01em; font-weight: 650; }
     .row { margin-bottom: 18px; }
     .row label.head { display: block; font-weight: 600; margin-bottom: 6px; }
     .row .sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
@@ -147,11 +149,12 @@
       background: var(--card);
       border: 1px solid var(--border);
       border-left: 3px solid var(--accent);
-      border-radius: 8px;
+      border-radius: var(--radius);
       padding: 12px 14px;
       font-size: 13px;
       line-height: 1.5;
       margin-bottom: 20px;
+      box-shadow: var(--shadow);
     }
     .note.ok { border-left-color: var(--ok); }
 
@@ -160,10 +163,13 @@
     .style-item, .model-card {
       background: var(--card);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 12px 14px;
-      margin-bottom: 10px;
+      border-radius: var(--radius-lg);
+      padding: 13px 15px;
+      margin-bottom: 11px;
+      box-shadow: var(--shadow);
+      transition: box-shadow .16s, border-color .16s;
     }
+    .model-card:hover { box-shadow: var(--shadow-md); }
     .style-item .head-row { display: flex; align-items: center; gap: 8px; }
     .style-item .name { font-weight: 600; }
     .style-item .prompt { font-size: 12.5px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
@@ -173,10 +179,12 @@
     .model-card .name { font-weight: 600; }
     .badge {
       font-size: 11px;
-      padding: 2px 9px;
+      font-weight: 600;
+      padding: 3px 10px;
       border-radius: 999px;
       background: var(--chip);
       color: var(--chip-text);
+      letter-spacing: 0.01em;
     }
     .badge.active { background: var(--ok); color: #fff; }
     .model-card .desc { font-size: 12.5px; color: var(--muted); margin: 6px 0 10px; line-height: 1.5; }
@@ -194,12 +202,75 @@
 
     .hotkey-input.rec { border-color: var(--accent); color: var(--muted); }
     .err-text { color: var(--err); font-size: 12.5px; margin-top: 6px; display: none; }
+
+    /* ---- Вкладка генерации изображений ---- */
+    #sec-image { position: absolute; inset: 0; max-width: none; padding: 0; }
+    #sec-image.active { display: flex; }
+    .img-wrap { display: flex; width: 100%; height: 100%; }
+    .img-side {
+      width: 340px;
+      flex: none;
+      border-right: 1px solid var(--border);
+      background: var(--card);
+      overflow-y: auto;
+      padding: 16px;
+    }
+    .img-eng { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+    .img-side textarea, .img-side select, .img-side input[type="number"] { width: 100%; }
+    .img-form.disabled { opacity: 0.5; pointer-events: none; }
+    .img-adv { margin-bottom: 6px; }
+    .img-adv summary { cursor: pointer; color: var(--muted); font-size: 13px; user-select: none; }
+    .img-adv .row { margin-bottom: 12px; }
+    .img-main { flex: 1; overflow-y: auto; padding: 16px; }
+    .img-gallery {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+    .img-empty { grid-column: 1 / -1; text-align: center; color: var(--muted); margin-top: 60px; line-height: 1.6; }
+    .img-cell {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--chip);
+      aspect-ratio: 1 / 1;
+      box-shadow: var(--shadow);
+      transition: transform .15s, box-shadow .15s;
+    }
+    .img-cell:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .img-cell img { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; display: block; }
+    .img-cell.pending { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; }
+    .img-cell .tools {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      display: flex; gap: 4px; padding: 6px;
+      background: linear-gradient(transparent, rgba(0,0,0,0.55));
+      opacity: 0; transition: opacity .15s;
+    }
+    .img-cell:hover .tools { opacity: 1; }
+    .img-cell .tools button {
+      flex: 1; font-size: 11px; padding: 4px 0; border-radius: 6px;
+      background: rgba(255,255,255,0.92); color: #111;
+    }
+    .img-lightbox {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+      display: none; align-items: center; justify-content: center; z-index: 1000; padding: 24px;
+    }
+    .img-lightbox.on { display: flex; }
+    .img-lightbox img { max-width: 100%; max-height: 100%; border-radius: 8px; }
+    .spin {
+      width: 22px; height: 22px; border: 3px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin-bottom: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <nav>
     <div class="app-name"><span class="dot">●</span> Ответка</div>
     <button id="nav-chat"></button>
+    <button id="nav-image"></button>
     <button id="nav-general" class="active"></button>
     <button id="nav-styles"></button>
     <button id="nav-model"></button>
@@ -224,6 +295,102 @@
             <textarea id="chat-input" rows="1"></textarea>
             <button class="btn primary" id="chat-send"></button>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="sec-image">
+      <div class="img-wrap">
+        <div class="img-side">
+          <div class="img-eng" id="img-eng"></div>
+          <div class="note" id="img-nomodel" style="display:none"></div>
+          <div class="img-form" id="img-form">
+            <div class="row">
+              <label class="head" id="l-img-prompt"></label>
+              <textarea id="img-prompt" rows="3"></textarea>
+              <div class="sub" id="l-img-prompt-hint"></div>
+            </div>
+            <div class="row">
+              <label class="check" style="gap:8px">
+                <input type="checkbox" id="img-enhance" />
+                <span id="l-img-enhance"></span>
+              </label>
+              <div class="sub" id="l-img-enhance-hint"></div>
+            </div>
+            <div class="row">
+              <label class="head" id="l-img-ref"></label>
+              <input type="file" id="img-ref-file" accept="image/png,image/jpeg,image/webp" style="display:none" />
+              <div class="inline">
+                <button class="btn" id="img-ref-btn" style="font-size:12.5px"></button>
+                <div id="img-ref-preview" style="display:none;position:relative">
+                  <img id="img-ref-thumb" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border);display:block" />
+                  <button id="img-ref-remove" title="✕" style="position:absolute;top:-7px;right:-7px;width:18px;height:18px;line-height:16px;padding:0;border-radius:50%;background:var(--err);color:#fff;font-size:11px">✕</button>
+                </div>
+              </div>
+              <div class="sub" id="l-img-ref-hint"></div>
+              <div id="img-strength-row" style="display:none;margin-top:10px">
+                <label class="head"><span id="l-img-strength"></span>: <span id="img-strength-val"></span></label>
+                <input type="range" id="img-strength" min="0.2" max="0.9" step="0.05" style="width:100%" />
+                <div class="sub" id="l-img-strength-hint"></div>
+              </div>
+            </div>
+            <div class="row">
+              <label class="head" id="l-img-size"></label>
+              <select id="img-size">
+                <option value="1024x1024"></option>
+                <option value="832x1216"></option>
+                <option value="1216x832"></option>
+                <option value="1920x1088"></option>
+                <option value="1088x1920"></option>
+              </select>
+              <div class="sub" id="l-img-size-hint"></div>
+            </div>
+            <div class="row">
+              <label class="head" id="l-img-count"></label>
+              <select id="img-count">
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </div>
+            <details class="img-adv">
+              <summary id="l-img-adv"></summary>
+              <div class="row" style="margin-top:12px">
+                <label class="head" id="l-img-neg"></label>
+                <textarea id="img-neg" rows="2"></textarea>
+                <div class="sub" id="l-img-neg-hint"></div>
+              </div>
+              <div class="row">
+                <label class="head"><span id="l-img-steps"></span>: <span id="img-steps-val"></span></label>
+                <input type="range" id="img-steps" min="8" max="50" step="1" style="width:100%" />
+                <div class="sub" id="l-img-steps-hint"></div>
+              </div>
+              <div class="row">
+                <label class="head"><span id="l-img-cfg"></span>: <span id="img-cfg-val"></span></label>
+                <input type="range" id="img-cfg" min="1" max="12" step="0.5" style="width:100%" />
+                <div class="sub" id="l-img-cfg-hint"></div>
+              </div>
+              <div class="row">
+                <label class="head" id="l-img-seed"></label>
+                <div class="inline">
+                  <input type="number" id="img-seed" style="max-width:150px" />
+                  <label class="check" style="gap:6px">
+                    <input type="checkbox" id="img-seed-rand" checked />
+                    <span id="l-img-seed-rand"></span>
+                  </label>
+                </div>
+                <div class="sub" id="l-img-seed-hint"></div>
+              </div>
+              <button class="btn" id="img-reset" style="font-size:12px"></button>
+            </details>
+            <div class="sub" id="img-estimate" style="margin:10px 0 0"></div>
+            <button class="btn primary" id="img-generate" style="width:100%;margin-top:8px"></button>
+            <button class="btn" id="img-folder" style="width:100%;margin-top:8px;font-size:12px"></button>
+          </div>
+        </div>
+        <div class="img-main">
+          <div class="img-gallery" id="img-gallery"></div>
         </div>
       </div>
     </section>
@@ -328,10 +495,15 @@
         </div>
         <button class="btn" id="btn-open-models" style="margin-top:10px"></button>
       </div>
+
+      <h2 id="l-image-models" style="margin-top:30px"></h2>
+      <div class="note" id="img-hw-note" style="display:none"></div>
+      <div id="image-model-list"></div>
     </section>
   </main>
   <script src="i18n.js"></script>
   <script src="chat.js"></script>
+  <script src="image.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

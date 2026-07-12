@@ -7,11 +7,17 @@ let t = (k) => k;
 let lang = "ru";
 let dl = null; // { id, downloaded, total }
 let HW = null; // рекомендация под железо { ramGb, vramGb, gpu, recommendedId }
+let imgDl = null; // прогресс скачивания image-модели
+let imgHW = null; // рекомендация image-модели под железо
 
 async function loadHardware() {
   try {
     HW = await inv("recommend_model");
     if (S) renderModels();
+  } catch (e) {}
+  try {
+    imgHW = await inv("recommend_image_model");
+    if (S) renderImageModels();
   } catch (e) {}
 }
 
@@ -34,9 +40,10 @@ function fmtGb(bytes) {
 
 function renderTexts() {
   $("nav-chat").textContent = "💬 " + t("tabChat");
-  $("nav-general").textContent = t("tabGeneral");
-  $("nav-styles").textContent = t("tabStyles");
-  $("nav-model").textContent = t("tabModel");
+  $("nav-image").textContent = "🎨 " + t("tabImage");
+  $("nav-general").textContent = "⚙️ " + t("tabGeneral");
+  $("nav-styles").textContent = "🎭 " + t("tabStyles");
+  $("nav-model").textContent = "🧠 " + t("tabModel");
   $("version").textContent = "v" + S.version;
   $("privacy-note").textContent = t("privacyNote");
   $("l-hotkey").textContent = t("hotkeyLabel");
@@ -71,6 +78,7 @@ function renderTexts() {
   $("new-style-prompt").placeholder = t("stylePromptPh");
   $("btn-add-style").textContent = t("styleAdd");
   $("welcome-note").textContent = t("welcome");
+  $("l-image-models").textContent = t("imgModelsSection");
 }
 
 function renderGeneral() {
@@ -282,6 +290,125 @@ function renderModels() {
     t("totalSizeLabel") + " " + fmtGb(S.modelsBytes || 0);
   $("l-models-dir").textContent = t("modelsDirLabel");
   $("btn-open-models").textContent = t("openFolder");
+
+  renderImageModels();
+}
+
+// Карточки моделей генерации изображений (на вкладке «Модель»).
+function renderImageModels() {
+  const list = $("image-model-list");
+  if (!list || !S) return;
+  list.innerHTML = "";
+  for (const m of S.imageCatalog || []) {
+    const meta = IMAGE_MODEL_META[m.id] || { name: { ru: m.id }, desc: { ru: "" } };
+    const downloaded = (S.imageDownloaded || []).includes(m.id);
+    const active = S.settings.imageModel === m.id;
+    const isDl = imgDl && imgDl.id === m.id;
+
+    const card = document.createElement("div");
+    card.className = "model-card";
+    card.innerHTML =
+      '<div class="head-row"><span class="name"></span><span class="badge"></span></div>' +
+      '<div class="desc"></div>' +
+      '<div class="actions">' +
+      '<label class="use-radio" style="display:flex;align-items:center;gap:6px;cursor:pointer">' +
+      '<input type="radio" name="active-image-model" style="width:16px;height:16px;accent-color:var(--accent)" />' +
+      '<span class="use-label"></span></label>' +
+      '<button class="btn primary act-dl"></button>' +
+      '<button class="btn danger act-del"></button>' +
+      '<button class="btn act-cancel"></button>' +
+      '<div class="progress"><div></div></div>' +
+      '<span class="muted pct"></span>' +
+      "</div>";
+
+    card.querySelector(".name").textContent = meta.name[lang] || meta.name.ru;
+    const badge = card.querySelector(".badge");
+    if (active) { badge.textContent = t("activeBadge"); badge.className = "badge active"; }
+    else if (downloaded) badge.textContent = t("downloadedBadge");
+    else badge.textContent = t("sizePrefix") + (m.sizeMb / 1024).toFixed(1) + " GB";
+    if (imgHW && imgHW.recommendedId === m.id && !active) {
+      const rb = document.createElement("span");
+      rb.className = "badge";
+      rb.style.background = "var(--accent)";
+      rb.style.color = "#fff";
+      rb.textContent = "⭐ " + t("recommendBadge");
+      card.querySelector(".head-row").appendChild(rb);
+    }
+    card.querySelector(".desc").textContent = meta.desc[lang] || meta.desc.ru;
+
+    const bDl = card.querySelector(".act-dl");
+    const radioWrap = card.querySelector(".use-radio");
+    const radio = radioWrap.querySelector("input");
+    const bDel = card.querySelector(".act-del");
+    const bCancel = card.querySelector(".act-cancel");
+    const prog = card.querySelector(".progress");
+    const pct = card.querySelector(".pct");
+
+    bDl.textContent = t("dlBtn");
+    radioWrap.querySelector(".use-label").textContent = t("activeRadio");
+    bDel.textContent = t("delBtn");
+    bCancel.textContent = t("cancelBtn");
+
+    bDl.style.display = !downloaded && !isDl ? "" : "none";
+    radioWrap.style.display = downloaded ? "" : "none";
+    radio.checked = active;
+    bDel.style.display = downloaded ? "" : "none";
+    bCancel.style.display = isDl ? "" : "none";
+    prog.style.display = isDl ? "block" : "none";
+
+    if (isDl && imgDl.total) {
+      const p = Math.round((imgDl.downloaded / imgDl.total) * 100);
+      prog.firstElementChild.style.width = p + "%";
+      let line = p + "% · " + fmtGb(imgDl.downloaded) + " / " + fmtGb(imgDl.total);
+      if (imgDl.speed > 0) {
+        const mbs = (imgDl.speed / 1024 / 1024).toFixed(1);
+        const etaSec = Math.max(0, (imgDl.total - imgDl.downloaded) / imgDl.speed);
+        const eta =
+          etaSec >= 90
+            ? "≈" + Math.round(etaSec / 60) + (lang === "ru" ? " мин" : " min")
+            : "≈" + Math.round(etaSec) + (lang === "ru" ? " сек" : " sec");
+        line += " · " + mbs + (lang === "ru" ? " МБ/с" : " MB/s") + " · " + eta;
+      }
+      pct.textContent = line;
+    }
+
+    bDl.onclick = async () => {
+      imgDl = { id: m.id, downloaded: 0, total: m.sizeMb * 1024 * 1024 };
+      renderImageModels();
+      try {
+        await inv("download_image_model", { id: m.id });
+      } catch (e) {
+        if (!String(e).includes("CANCELED")) alert(t("dlError") + e);
+      }
+      imgDl = null;
+      await refresh();
+    };
+    bCancel.onclick = () => inv("cancel_image_download");
+    radio.onchange = async () => {
+      if (!radio.checked) return;
+      try { await inv("use_image_model", { id: m.id }); } catch (e) { alert(e); }
+      await refresh();
+    };
+    bDel.onclick = async () => {
+      if (!confirm(t("confirmDelModel"))) return;
+      try { await inv("delete_image_model", { id: m.id }); } catch (e) { alert(t("delErr") + e); }
+      await refresh();
+    };
+
+    list.appendChild(card);
+  }
+
+  // Инфо про железо для картинок
+  const hn = $("img-hw-note");
+  if (imgHW) {
+    const u = lang === "ru" ? " ГБ" : " GB";
+    const recMeta = IMAGE_MODEL_META[imgHW.recommendedId];
+    const recName = recMeta ? recMeta.name[lang] || recMeta.name.ru : imgHW.recommendedId;
+    hn.style.display = "";
+    hn.innerHTML = t("recommendLine") + " <b>" + recName + "</b>";
+  } else {
+    hn.style.display = "none";
+  }
 }
 
 function renderAll() {
@@ -299,16 +426,25 @@ async function refresh() {
   applyTheme(S.settings.theme);
   renderAll();
   if (window.Chat) Chat.onData();
+  if (window.ImageGen) ImageGen.onData();
 }
 
 // ---------- вкладки ----------
 
 function switchTab(name) {
-  for (const n of ["chat", "general", "styles", "model"]) {
+  const leavingImage = window.__activeTab === "image" && name !== "image";
+  const enteringImage = name === "image" && window.__activeTab !== "image";
+  window.__activeTab = name;
+  for (const n of ["chat", "image", "general", "styles", "model"]) {
     $("nav-" + n).classList.toggle("active", n === name);
     $("sec-" + n).classList.toggle("active", n === name);
   }
   if (name === "chat" && window.Chat) Chat.activate();
+  if (name === "image" && window.ImageGen) ImageGen.activate();
+  // Режим картинок: входим — выгружаем текстовую модель (только картиночная в
+  // VRAM = максимум скорости); выходим — возвращаем текстовую для ассистента.
+  if (enteringImage) inv("image_mode", { on: true }).catch(() => {});
+  if (leavingImage) inv("image_mode", { on: false }).catch(() => {});
 }
 
 // ---------- запись горячей клавиши ----------
@@ -385,7 +521,9 @@ async function boot() {
   loadHardware(); // определяем железо в фоне, обновит карточки моделей
   $("btn-open-models").onclick = () => inv("open_models_dir");
   if (window.Chat) await Chat.init();
+  if (window.ImageGen) await ImageGen.init();
   $("nav-chat").onclick = () => switchTab("chat");
+  $("nav-image").onclick = () => switchTab("image");
   $("nav-general").onclick = () => switchTab("general");
   $("nav-styles").onclick = () => switchTab("styles");
   $("nav-model").onclick = () => switchTab("model");
@@ -456,6 +594,23 @@ async function boot() {
   await listen("llama-status", (e) => {
     S.llama = e.payload.status;
     renderModels();
+  });
+  await listen("image-status", (e) => {
+    if (S) S.image = e.payload.status;
+    if (window.ImageGen) ImageGen.onData();
+  });
+  await listen("image-dl-progress", (e) => {
+    const p = e.payload;
+    if (p.canceled) { imgDl = null; refresh(); return; }
+    if (p.done) { imgDl = null; renderImageModels(); return; }
+    const now = Date.now();
+    let speed = 0;
+    if (imgDl && imgDl.id === p.id && imgDl.ts && p.downloaded > imgDl.downloaded) {
+      const inst = (p.downloaded - imgDl.downloaded) / ((now - imgDl.ts) / 1000 || 1);
+      speed = imgDl.speed ? imgDl.speed * 0.7 + inst * 0.3 : inst;
+    }
+    imgDl = { id: p.id, downloaded: p.downloaded, total: p.total, ts: now, speed };
+    renderImageModels();
   });
   await listen("settings-changed", () => refresh());
 }
